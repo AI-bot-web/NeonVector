@@ -5,6 +5,7 @@
 敌袭：UFO每10/15秒发射反弹弹幕和分裂彩虹弹  
 > 🎮 [立即试玩](Artifacts Preview.html)  
 > ⚠️ 需现代浏览器支持
+> 👇下载html文件，点击即玩！
 
 NeonVector Core Rules
 Movement: WASD controls  
@@ -13,3 +14,4 @@ Damage: Player bullets cancel enemy shots (+1HP), -3HP when hitting UFO
 Attacks: UFO fires bouncing barrages (10s) and splitting rainbow bullets (15s)  
 > 🎮 [Play Now](Artifacts Preview.html)  
 > ⚠️ Requires modern browsers
+> 👇Download the html file to start！
