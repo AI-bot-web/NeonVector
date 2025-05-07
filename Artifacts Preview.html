@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        canvas {
+            border: 2px solid #00ffff;
+            background: #0a0a1a;
+        }
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background: #000;
+            color: white;
+            font-family: 'Arial', sans-serif;
+        }
+        #gameOver {
+            position: absolute;
+            font-size: 48px;
+            color: #ff0066;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <div id="gameOver">GAME OVER</div>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const gameOverText = document.getElementById('gameOver');
+        
+        // 游戏对象
+        const player = {
+            x: 400, y: 500,
+            size: 20,
+            speed: 5,
+            hp: 100,
+            maxHp: 100,
+            lastShot: 0
+        };
+
+        const ufo = {
+            x: 400, y: 100,
+            size: 40,
+            speed: 2,
+            hp: 100,
+            maxHp: 100,
+            angle: 0,
+            patternTimer: 0,
+            patternTimer2: 0,
+            moveTimer: 0,
+            targetX: 400,
+            targetY: 100,
+            rotationSpeed: 2
+        };
+
+        let playerBullets = [];
+        let enemyBullets = [];
+        let specialBullets = [];
+        let rainbowBullets = [];
+        
+        const keys = {};
+        const bulletSpeed = 8;
+        const bulletSize = 5;
+
+        const colors = {
+            player: '#00ffff',
+            enemy: '#ff0055',
+            playerBullet: '#00ff88',
+            enemyBullet: '#ff3300',
+            specialBullet: '#ffaa00',
+            rainbowBullet: ['#ff0000', '#ff9900', '#ffff00', '#33ff00', '#0099ff']
+        };
+
+        window.addEventListener('keydown', (e) => keys[e.key] = true);
+        window.addEventListener('keyup', (e) => keys[e.key] = false);
+
+        function updateUfoPosition() {
+            const dx = ufo.targetX - ufo.x;
+            const dy = ufo.targetY - ufo.y;
+            const distance = Math.sqrt(dx*dx + dy*dy);
+            
+            if (distance > 2) {
+                ufo.x += (dx/distance) * ufo.speed;
+                ufo.y += (dy/distance) * ufo.speed;
+            } else {
+                if (ufo.moveTimer++ > 180) {
+                    ufo.targetX = Math.random() * 600 + 100;
+                    ufo.targetY = Math.random() * 300 + 50;
+                    ufo.moveTimer = 0;
+                }
+            }
+            
+            ufo.angle += ufo.rotationSpeed;
+        }
+
+        function gameLoop() {
+            if (player.hp > 0 && ufo.hp > 0) {
+                update();
+                draw();
+                requestAnimationFrame(gameLoop);
+            } else {
+                gameOverText.style.display = 'block';
+            }
+        }
+
+        function update() {
+            updateUfoPosition();
+            
+            if (keys['a'] && player.x > 20) player.x -= player.speed;
+            if (keys['d'] && player.x < 780) player.x += player.speed;
+            if (keys['w'] && player.y > 20) player.y -= player.speed;
+            if (keys['s'] && player.y < 580) player.y += player.speed;
+
+            const now = Date.now();
+            const directions = [];
+            
+            // 检测组合按键
+            if (keys['ArrowUp']) directions.push('up');
+            if (keys['ArrowDown']) directions.push('down');
+            if (keys['ArrowLeft']) directions.push('left');
+            if (keys['ArrowRight']) directions.push('right');
+
+            if (directions.length > 0 && now - player.lastShot > 250) {
+                player.lastShot = now;
+                let angle = 0;
+
+                // 计算组合角度
+                if (directions.includes('up') && directions.includes('right')) angle = -Math.PI/4;
+                else if (directions.includes('up') && directions.includes('left')) angle = -3*Math.PI/4;
+                else if (directions.includes('down') && directions.includes('right')) angle = Math.PI/4;
+                else if (directions.includes('down') && directions.includes('left')) angle = 3*Math.PI/4;
+                else if (directions.includes('up')) angle = -Math.PI/2;
+                else if (directions.includes('down')) angle = Math.PI/2;
+                else if (directions.includes('left')) angle = Math.PI;
+                else if (directions.includes('right')) angle = 0;
+
+                playerBullets.push({
+                    x: player.x,
+                    y: player.y,
+                    angle,
+                    speed: bulletSpeed
+                });
+            }
+
+            if (Math.random() < 0.2) {
+                for (let i = 0; i < 3; i++) {
+                    const baseAngle = (ufo.angle * Math.PI/180) + (i-1) * 0.3;
+                    enemyBullets.push({
+                        x: ufo.x,
+                        y: ufo.y,
+                        angle: baseAngle,
+                        speed: 6
+                    });
+                }
+            }
+
+            // 特殊攻击1（10秒间隔）
+            ufo.patternTimer += 16;
+            if (ufo.patternTimer >= 10000) {
+                ufo.patternTimer = 0;
+                for (let i = 0; i < 5; i++) {
+                    setTimeout(() => {
+                        for (let a = 0; a < Math.PI*2; a += Math.PI/8) {
+                            specialBullets.push({
+                                x: ufo.x,
+                                y: ufo.y,
+                                angle: a + (ufo.angle * Math.PI/180),
+                                speed: 5,
+                                bounces: 1,
+                                size: 18,
+                                originalSize: 18
+                            });
+                        }
+                    }, i * 200);
+                }
+            }
+
+            // 彩虹攻击（15秒间隔）
+            ufo.patternTimer2 += 16;
+            if (ufo.patternTimer2 >= 15000) {
+                ufo.patternTimer2 = 0;
+                for (let i = 0; i < 5; i++) {
+                    const angle = (Math.PI*2/5) * i;
+                    rainbowBullets.push({
+                        x: ufo.x,
+                        y: ufo.y,
+                        angle,
+                        speed: 4,
+                        size: 80,
+                        colorIndex: i % 5,
+                        canSplit: true
+                    });
+                }
+            }
+
+            updateBullets(playerBullets);
+            updateBullets(enemyBullets);
+            updateBullets(specialBullets);
+            updateRainbowBullets(rainbowBullets);
+
+            detectCollisions();
+        }
+
+        function updateBullets(bullets) {
+            bullets.forEach((b, i) => {
+                b.x += Math.cos(b.angle) * b.speed;
+                b.y += Math.sin(b.angle) * b.speed;
+                
+                if (b.bounces !== undefined) {
+                    if (b.x <= 0 || b.x >= 800 || b.y <= 0 || b.y >= 600) {
+                        if (b.bounces > 0) {
+                            const normal = (b.x <= 0 || b.x >= 800) ? 
+                                {x: (b.x <= 0) ? 1 : -1, y: 0} : 
+                                {x: 0, y: (b.y <= 0) ? 1 : -1};
+                            const dot = 2 * (Math.cos(b.angle)*normal.x + Math.sin(b.angle)*normal.y);
+                            b.angle = Math.atan2(
+                                Math.sin(b.angle) - dot * normal.y,
+                                Math.cos(b.angle) - dot * normal.x
+                            );
+                            b.bounces--;
+                            b.size = Math.max(10, b.originalSize * (0.7 ** (1 - b.bounces)));
+                        } else {
+                            bullets.splice(i, 1);
+                        }
+                    }
+                } else if (b.x < 0 || b.x > 800 || b.y < 0 || b.y > 600) {
+                    bullets.splice(i, 1);
+                }
+            });
+        }
+
+        function updateRainbowBullets(bullets) {
+            bullets.forEach((b, i) => {
+                b.x += Math.cos(b.angle) * b.speed;
+                b.y += Math.sin(b.angle) * b.speed;
+
+                if (distance(b, player) < (player.size/2 + b.size/2) && b.canSplit) {
+                    for (let j = 0; j < 5; j++) {
+                        const newAngle = b.angle + (Math.PI*2/5)*j;
+                        bullets.push({
+                            x: b.x,
+                            y: b.y,
+                            angle: newAngle,
+                            speed: 6,
+                            size: 40,
+                            colorIndex: j % 5,
+                            canSplit: false
+                        });
+                    }
+                    bullets.splice(i, 1);
+                }
+            });
+        }
+
+        function detectCollisions() {
+            playerBullets.forEach((pb, pi) => {
+                enemyBullets.forEach((eb, ei) => {
+                    if (distance(pb, eb) < 10) {
+                        player.hp = Math.min(player.maxHp, player.hp + 1); // 恢复血量
+                        playerBullets.splice(pi, 1);
+                        enemyBullets.splice(ei, 1);
+                    }
+                });
+                
+                if (distance(pb, ufo) < ufo.size/2) {
+                    ufo.hp = Math.max(0, ufo.hp - 3); // 伤害改为3
+                    playerBullets.splice(pi, 1);
+                }
+            });
+
+            enemyBullets.concat(specialBullets, rainbowBullets).forEach(b => {
+                if (distance(b, player) < (player.size/2 + (b.size || bulletSize)/2)) {
+                    player.hp = Math.max(0, player.hp - 1);
+                }
+            });
+        }
+
+        function distance(a, b) {
+            return Math.sqrt((a.x - b.x)**2 + (a.y - b.y)**2);
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, 800, 600);
+            
+            ctx.strokeStyle = '#ffffff';
+            ctx.strokeRect(20, 20, 760, 560);
+
+            // 绘制玩家
+            ctx.fillStyle = colors.player;
+            ctx.beginPath();
+            ctx.arc(player.x, player.y, player.size/2, 0, Math.PI*2);
+            ctx.fill();
+
+            // 绘制UFO
+            ctx.save();
+            ctx.translate(ufo.x, ufo.y);
+            ctx.rotate(ufo.angle * Math.PI/180);
+            ctx.fillStyle = colors.enemy;
+            ctx.beginPath();
+            ctx.arc(0, 0, ufo.size/2, 0, Math.PI*2);
+            ctx.fill();
+            ctx.restore();
+
+            drawBullets(playerBullets, colors.playerBullet);
+            drawBullets(enemyBullets, colors.enemyBullet);
+            drawSpecialBullets(specialBullets, colors.specialBullet);
+            drawRainbowBullets(rainbowBullets);
+
+            drawHealthBar(player, 580, 20, colors.player);
+            drawHealthBar(ufo, 20, 20, colors.enemy);
+        }
+
+        function drawStar(x, y, radius, color) {
+            const spikes = 5;
+            const step = Math.PI / spikes;
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            for (let i = 0; i < 2 * Math.PI; i += step) {
+                const r = i % (Math.PI/2.5) ? radius * 0.5 : radius;
+                const xPos = x + r * Math.cos(i);
+                const yPos = y + r * Math.sin(i);
+                ctx.lineTo(xPos, yPos);
+            }
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        function drawRainbowBullets(bullets) {
+            bullets.forEach(b => {
+                ctx.save();
+                ctx.translate(b.x, b.y);
+                ctx.rotate(b.angle);
+                const scale = b.size / ufo.size;
+                ctx.scale(scale, scale);
+                drawStar(0, 0, ufo.size/2, colors.rainbowBullet[b.colorIndex]);
+                ctx.restore();
+            });
+        }
+
+        function drawBullets(bullets, color) {
+            ctx.fillStyle = color;
+            bullets.forEach(b => {
+                ctx.beginPath();
+                ctx.arc(b.x, b.y, bulletSize, 0, Math.PI*2);
+                ctx.fill();
+            });
+        }
+
+        function drawSpecialBullets(bullets, color) {
+            ctx.fillStyle = color;
+            bullets.forEach(b => {
+                ctx.save();
+                ctx.translate(b.x, b.y);
+                ctx.rotate(b.angle);
+                drawStar(0, 0, b.size/2, color);
+                ctx.restore();
+            });
+        }
+
+        function drawHealthBar(target, y, height, color) {
+            const width = 200;
+            const x = (800 - width)/2;
+            const currentHp = Math.max(0, target.hp);
+            
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.fillRect(x-2, y-2, width+4, height+4);
+            
+            ctx.fillStyle = '#333';
+            ctx.fillRect(x, y, width, height);
+            ctx.fillStyle = color;
+            ctx.fillRect(x, y, (width * (currentHp / target.maxHp)), height);
+            
+            ctx.fillStyle = 'white';
+            ctx.font = '14px Arial';
+            ctx.fillText(
+                `${target === player ? 'PLAYER' : 'ENEMY'} HP: ${currentHp}`,
+                x + 5, y + 15
+            );
+        }
+
+        gameLoop();
+    </script>
+</body>
+</html>
